@@ -10,6 +10,7 @@ SYSTEM_PROMPT = (
     "etwas öffnen möchte, bestätige den Befehl einfach kurz und nett."
 )
 
+# TODO: Trage hier deine echten Daten ein (Anführungszeichen stehen lassen!)
 TRIGGERCMD_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNDYyOWQ2OWE4NTdkMDAxN2UyN2U2YSIsImlhdCI6MTc4Mjk4MzE5OH0.krWJy-_x2HD3HA4qywMD-YJUftK5-kfv1WKsgW44xYk"
 COMPUTER_NAME = "DESKTOP-QQ9UGSB"
 
@@ -30,7 +31,7 @@ def trigger_pc_command(command_name):
         return False
 
 def ask_groq_direct(messages):
-    """Funkt Groq direkt über HTTP an, ganz ohne fehlerhafte Bibliothek"""
+    """Funkt Groq direkt über HTTP an"""
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         return "Groq API-Key fehlt in den Vercel-Umgebungsvariablen."
@@ -48,7 +49,8 @@ def ask_groq_direct(messages):
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=10)
         if res.status_code == 200:
-            return res.get_json()["choices"][0]["message"]["content"]
+            # Hier war der Fehler: .json() statt .get_json()
+            return res.json()["choices"][0]["message"]["content"]
         else:
             return f"Groq API Fehler: Status {res.status_code}"
     except Exception as e:
