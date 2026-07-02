@@ -10,7 +10,7 @@ SYSTEM_PROMPT = (
     "Du bist ein absolut präzises KI-Gehirn für einen Alexa Skill. Antworte kurz "
     "in maximal 2-3 Sätzen. Wenn du dir bei einem Fakt oder einer Zahl nicht zu "
     "100 % sicher bist, erfinde NIEMALS etwas, sondern sage stattdessen knallhart: "
-    "'Das weiß ich nicht.'"
+    "'Das weiß ich leider nicht.'"
 )
 
 @app.route("/api/alexa", methods=["POST"])
