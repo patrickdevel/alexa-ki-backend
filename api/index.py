@@ -25,7 +25,7 @@ def alexa_skill():
 
     # 1. Wenn der Skill gestartet wird
     if request_type == "LaunchRequest":
-        return respond("Hi! Ich bin dein KI-Assistent. Was gibt's?", chat_history)
+        return respond("(By Patrick Roth) Hi! Ich bin dein KI-Assistent. Was gibt's?", chat_history)
 
     # 2. Wenn ein Sprachbefehl reinkommt
     elif request_type == "IntentRequest":
