@@ -42,7 +42,7 @@ def alexa_skill():
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
                 
                 completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="llama-3.3-70b-versatile",
                     messages=messages
                 )
                 ai_response = completion.choices[0].message.content
