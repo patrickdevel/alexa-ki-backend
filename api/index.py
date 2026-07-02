@@ -1,10 +1,11 @@
 from flask import Flask, request, jsonify
-from groq import Groq
+import google.generativeai as genai
 import os
 
 app = Flask(__name__)
 
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+# Google Gemini konfigurieren
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 SYSTEM_PROMPT = (
     "Du bist ein absolut präzises KI-Gehirn für einen Alexa Skill. Antworte kurz "
@@ -18,16 +19,14 @@ def alexa_skill():
     data = request.get_json()
     request_type = data.get("request", {}).get("type")
     
-    # Verlauf aus den Session-Attributen holen (falls vorhanden)
+    # Verlauf aus den Session-Attributen holen
     session = data.get("session", {})
     attributes = session.get("attributes", {})
     chat_history = attributes.get("chat_history", [])
 
-    # 1. Wenn der Skill gestartet wird
     if request_type == "LaunchRequest":
-        return respond("(By Patrick Roth) Hi! Ich bin dein KI-Assistent. Was gibt's?", chat_history)
+        return respond("Hi! Ich bin dein KI-Assistent. Was gibt's?", chat_history)
 
-    # 2. Wenn ein Sprachbefehl reinkommt
     elif request_type == "IntentRequest":
         intent_name = data["request"]["intent"]["name"]
         
@@ -38,14 +37,22 @@ def alexa_skill():
                 # Nutzersatz zum Verlauf hinzufügen
                 chat_history.append({"role": "user", "content": user_text})
                 
-                # Payload für Groq zusammenbauen (System Prompt + Verlauf)
-                messages = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
-                
-                completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=messages
+                # Gemini-Modell initialisieren
+                model = genai.GenerativeModel(
+                    model_name="gemini-1.5-flash",
+                    system_instruction=SYSTEM_PROMPT
                 )
-                ai_response = completion.choices[0].message.content
+                
+                # Verlauf für Gemini übersetzen (Google nutzt 'user' und 'model')
+                gemini_history = []
+                for msg in chat_history:
+                    role = "user" if msg["role"] == "user" else "model"
+                    gemini_history.append({"role": role, "parts": [msg["content"]]})
+                
+                # Chat starten und Antwort generieren
+                chat = model.start_chat(history=gemini_history[:-1])
+                response = chat.send_message(user_text)
+                ai_response = response.text
                 
                 # KI-Antwort zum Verlauf hinzufügen
                 chat_history.append({"role": "assistant", "content": ai_response})
@@ -58,7 +65,6 @@ def alexa_skill():
     return respond("Alles klar, bis bald!", chat_history, end_session=True)
 
 def respond(text, chat_history, end_session=False):
-    """Hilfsfunktion, die den Verlauf in sessionAttributes zurückgibt"""
     return jsonify({
         "version": "1.0",
         "sessionAttributes": {
@@ -72,4 +78,3 @@ def respond(text, chat_history, end_session=False):
             "shouldEndSession": end_session
         }
     })
-
