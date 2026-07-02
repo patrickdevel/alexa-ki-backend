@@ -4,17 +4,28 @@ import os
 
 app = Flask(__name__)
 
-# Initialisiert den Groq-Client (API-Key ziehen wir aus den Umgebungsvariablen)
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+SYSTEM_PROMPT = (
+    "Du bist ein absolut präzises KI-Gehirn für einen Alexa Skill. Antworte kurz "
+    "in maximal 2-3 Sätzen. Wenn du dir bei einem Fakt oder einer Zahl nicht zu "
+    "100 % sicher bist, erfinde NIEMALS etwas, sondern sage stattdessen knallhart: "
+    "'Das weiß ich nicht.'"
+)
 
 @app.route("/api/alexa", methods=["POST"])
 def alexa_skill():
     data = request.get_json()
     request_type = data.get("request", {}).get("type")
+    
+    # Verlauf aus den Session-Attributen holen (falls vorhanden)
+    session = data.get("session", {})
+    attributes = session.get("attributes", {})
+    chat_history = attributes.get("chat_history", [])
 
-    # 1. Wenn der Skill gestartet wird ("Alexa, öffne Super AI")
+    # 1. Wenn der Skill gestartet wird
     if request_type == "LaunchRequest":
-        return respond("Hi! Ich bin dein KI-Assistent. Was gibt's?")
+        return respond("Hi! Ich bin dein KI-Assistent. Was gibt's?", chat_history)
 
     # 2. Wenn ein Sprachbefehl reinkommt
     elif request_type == "IntentRequest":
@@ -22,30 +33,37 @@ def alexa_skill():
         
         if intent_name == "AskAiIntent":
             try:
-                # Extrahiere den gesprochenen Text aus dem Slot
                 user_text = data["request"]["intent"]["slots"]["meinText"]["value"]
                 
-                # Schicke den Text an Groq (LLM)
+                # Nutzersatz zum Verlauf hinzufügen
+                chat_history.append({"role": "user", "content": user_text})
+                
+                # Payload für Groq zusammenbauen (System Prompt + Verlauf)
+                messages = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
+                
                 completion = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
-                    messages=[
-                        {"role": "system", "content": "Du bist ein absolut präzises KI-Gehirn. Antworte kurz in 2-3 Sätzen. Wenn du dir bei einem Fakt oder einer Zahl nicht zu 100 % sicher bist, erfinde NIEMALS etwas, sondern sage stattdessen knallhart: 'Das weiß ich nicht."},
-                        {"role": "user", "content": user_text}
-                    ]
+                    messages=messages
                 )
                 ai_response = completion.choices[0].message.content
-                return respond(ai_response)
+                
+                # KI-Antwort zum Verlauf hinzufügen
+                chat_history.append({"role": "assistant", "content": ai_response})
+                
+                return respond(ai_response, chat_history)
                 
             except Exception as e:
-                return respond("Fehler beim Verarbeiten der KI-Antwort.")
+                return respond("Fehler beim Verarbeiten der KI-Antwort.", chat_history)
 
-    # Standard-Antwort für Abbruch/Stopp
-    return respond("Alles klar, bis bald!", end_session=True)
+    return respond("Alles klar, bis bald!", chat_history, end_session=True)
 
-def respond(text, end_session=False):
-    """Hilfsfunktion für das korrekte Alexa JSON-Format"""
+def respond(text, chat_history, end_session=False):
+    """Hilfsfunktion, die den Verlauf in sessionAttributes zurückgibt"""
     return jsonify({
         "version": "1.0",
+        "sessionAttributes": {
+            "chat_history": chat_history
+        },
         "response": {
             "outputSpeech": {
                 "type": "PlainText",
