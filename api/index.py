@@ -4,18 +4,24 @@ import requests
 
 app = Flask(__name__)
 
+# Der Prompt zwingt die KI dazu, entweder eine Aktion zu triggern oder normal zu antworten
 SYSTEM_PROMPT = (
-    "Du bist ein absolut präzises KI-Gehirn für einen Alexa Skill. Antworte kurz "
-    "in maximal 2-3 Sätzen. Wenn der Nutzer den PC steuern, herunterfahren oder "
-    "etwas öffnen möchte, bestätige den Befehl einfach kurz und nett."
+    "Du bist die Steuereinheit für den Windows-PC des Nutzers via Alexa. "
+    "Wenn der Nutzer eine Aktion auf seinem PC ausführen möchte (z.B. App starten, herunterfahren, im Browser suchen), "
+    "antworte EXAKT in einem der folgenden Formate und füge KEINEN anderen Text hinzu:\n"
+    "- Für PC herunterfahren: ACTION: shutdown\n"
+    "- Für Suche im Browser: ACTION: search | <suchbegriff>\n"
+    "- Für App/Programm starten: ACTION: run | <programmname>\n\n"
+    "Wenn es sich um eine normale Frage handelt (z.B. Wie weit ist der Mond entfernt?), "
+    "antworte ganz normal, kurz und knackig in maximal 2-3 Sätzen."
 )
 
 # TODO: Trage hier deine echten Daten ein (Anführungszeichen stehen lassen!)
 TRIGGERCMD_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNDYyOWQ2OWE4NTdkMDAxN2UyN2U2YSIsImlhdCI6MTc4Mjk4MzE5OH0.krWJy-_x2HD3HA4qywMD-YJUftK5-kfv1WKsgW44xYk"
 COMPUTER_NAME = "DESKTOP-QQ9UGSB"
 
-def trigger_pc_command(command_name):
-    """Feuert den Befehl an deinen PC ab"""
+def trigger_pc_command(command_name, parameter=None):
+    """Feuert den Befehl inklusive optionaler Parameter an den PC ab"""
     if "DEIN_TRIGGERCMD_TOKEN_HIER" in TRIGGERCMD_TOKEN:
         return False
     try:
@@ -25,6 +31,9 @@ def trigger_pc_command(command_name):
             "computer": COMPUTER_NAME,
             "trigger": command_name
         }
+        if parameter:
+            data["parameter"] = parameter
+            
         res = requests.post(url, json=data, headers=headers)
         return res.status_code == 200
     except Exception:
@@ -49,11 +58,10 @@ def ask_groq_direct(messages):
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=10)
         if res.status_code == 200:
-            # Hier war der Fehler: .json() statt .get_json()
             return res.json()["choices"][0]["message"]["content"]
         else:
             return f"Groq API Fehler: Status {res.status_code}"
-    except Exception as e:
+    except Exception:
         return "Verbindung zu Groq fehlgeschlagen."
 
 @app.route("/api/alexa", methods=["POST"])
@@ -74,28 +82,43 @@ def alexa_skill():
             
             if intent_name == "AskAiIntent":
                 user_text = data["request"]["intent"]["slots"]["meinText"]["value"]
-                user_text_lower = user_text.lower()
                 
-                # Befehls-Check für den PC
-                if "taschenrechner" in user_text_lower or "rechner öffnen" in user_text_lower:
-                    trigger_pc_command("Calculator")
-                    ai_response = "Alles klar, ich öffne den Taschenrechner auf deinem PC."
-                    chat_history.append({"role": "user", "content": user_text})
-                    chat_history.append({"role": "assistant", "content": ai_response})
-                    return respond(ai_response, chat_history)
-                
-                # Direkter HTTP-Aufruf an Groq
+                # Chat-Verlauf aufbauen
                 chat_history.append({"role": "user", "content": user_text})
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
                 
+                # KI fragen, was zu tun ist
                 ai_response = ask_groq_direct(messages)
                 
+                # Checken, ob die KI eine PC-Aktion ausführen will
+                if ai_response.startswith("ACTION:"):
+                    parts = ai_response.replace("ACTION:", "").strip().split("|")
+                    action_type = parts[0].strip()
+                    
+                    if action_type == "shutdown":
+                        trigger_pc_command("Shutdown")
+                        respond_text = "Alles klar, ich fahre deinen PC in 10 Sekunden herunter. Speichere lieber schnell!"
+                    elif action_type == "search" and len(parts) > 1:
+                        search_term = parts[1].strip()
+                        trigger_pc_command("Search", parameter=search_term)
+                        respond_text = f"Ich habe das Web nach '{search_term}' auf deinem PC durchsucht."
+                    elif action_type == "run" and len(parts) > 1:
+                        app_name = parts[1].strip()
+                        trigger_pc_command("Run", parameter=app_name)
+                        respond_text = f"Ich starte {app_name} auf deinem PC."
+                    else:
+                        respond_text = "Ich habe den PC-Befehl verstanden, aber die Aktion war ungültig."
+                    
+                    chat_history.append({"role": "assistant", "content": respond_text})
+                    return respond(respond_text, chat_history)
+                
+                # Falls keine Aktion, normale KI-Antwort ausgeben
                 chat_history.append({"role": "assistant", "content": ai_response})
                 return respond(ai_response, chat_history)
 
         return respond("Alles klar, bis bald!", chat_history, end_session=True)
         
-    except Exception as e:
+    except Exception:
         return respond("Interner Fehler im Backend.", [])
 
 def respond(text, chat_history, end_session=False):
