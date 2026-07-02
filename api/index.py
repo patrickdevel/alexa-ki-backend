@@ -27,7 +27,7 @@ def alexa_skill():
                 
                 # Schicke den Text an Groq (LLM)
                 completion = client.chat.completions.create(
-                    model="llama3-8b-8192",
+                    model="llama-3.1-8b-instant",
                     messages=[
                         {"role": "system", "content": "Du bist ein schlaues, direktes KI-Gehirn für einen Alexa Skill. Antworte immer kurz, knackig und direkt in maximal 2-3 Sätzen, damit es flüssig vorgelesen werden kann."},
                         {"role": "user", "content": user_text}
