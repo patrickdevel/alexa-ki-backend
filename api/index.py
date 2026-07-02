@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import os
+import requests
 
 app = Flask(__name__)
 
@@ -9,7 +10,6 @@ SYSTEM_PROMPT = (
     "etwas öffnen möchte, bestätige den Befehl einfach kurz und nett."
 )
 
-# TODO: Trage hier deine echten Daten ein (Anführungszeichen stehen lassen!)
 TRIGGERCMD_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNDYyOWQ2OWE4NTdkMDAxN2UyN2U2YSIsImlhdCI6MTc4Mjk4MzE5OH0.krWJy-_x2HD3HA4qywMD-YJUftK5-kfv1WKsgW44xYk"
 COMPUTER_NAME = "DESKTOP-QQ9UGSB"
 
@@ -18,7 +18,6 @@ def trigger_pc_command(command_name):
     if "DEIN_TRIGGERCMD_TOKEN_HIER" in TRIGGERCMD_TOKEN:
         return False
     try:
-        import requests
         url = "https://www.triggercmd.com/api/run/trigger"
         headers = {"Authorization": f"Bearer {TRIGGERCMD_TOKEN}"}
         data = {
@@ -29,6 +28,31 @@ def trigger_pc_command(command_name):
         return res.status_code == 200
     except Exception:
         return False
+
+def ask_groq_direct(messages):
+    """Funkt Groq direkt über HTTP an, ganz ohne fehlerhafte Bibliothek"""
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return "Groq API-Key fehlt in den Vercel-Umgebungsvariablen."
+    
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages
+    }
+    
+    try:
+        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        if res.status_code == 200:
+            return res.get_json()["choices"][0]["message"]["content"]
+        else:
+            return f"Groq API Fehler: Status {res.status_code}"
+    except Exception as e:
+        return "Verbindung zu Groq fehlgeschlagen."
 
 @app.route("/api/alexa", methods=["POST"])
 def alexa_skill():
@@ -58,21 +82,12 @@ def alexa_skill():
                     chat_history.append({"role": "assistant", "content": ai_response})
                     return respond(ai_response, chat_history)
                 
-                # Groq erst hier importieren, damit die App nicht beim Start crashed
-                try:
-                    from groq import Groq
-                    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-                except Exception:
-                    return respond("Fehler beim Laden der KI-Bibliothek.", chat_history)
-                    
+                # Direkter HTTP-Aufruf an Groq
                 chat_history.append({"role": "user", "content": user_text})
                 messages = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
                 
-                completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=messages
-                )
-                ai_response = completion.choices[0].message.content
+                ai_response = ask_groq_direct(messages)
+                
                 chat_history.append({"role": "assistant", "content": ai_response})
                 return respond(ai_response, chat_history)
 
