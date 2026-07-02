@@ -29,7 +29,7 @@ def alexa_skill():
                 completion = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=[
-                        {"role": "system", "content": "Du bist ein schlaues, direktes KI-Gehirn für einen Alexa Skill. Antworte immer kurz, knackig und direkt in maximal 2-3 Sätzen, damit es flüssig vorgelesen werden kann."},
+                        {"role": "system", "content": "Du bist ein absolut präzises KI-Gehirn. Antworte kurz in 2-3 Sätzen. Wenn du dir bei einem Fakt oder einer Zahl nicht zu 100 % sicher bist, erfinde NIEMALS etwas, sondern sage stattdessen knallhart: 'Das weiß ich nicht."},
                         {"role": "user", "content": user_text}
                     ]
                 )
